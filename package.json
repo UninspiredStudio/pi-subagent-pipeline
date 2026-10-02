@@ -4,14 +4,14 @@
   "type": "module",
   "description": "Configurable subagent rosters for Pi: write a profile, then run work as an observable pipeline",
   "license": "MIT",
-  "author": "uninspired",
+  "author": "UninspiredStudio",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/uninspired/pi-subagent-pipeline.git"
+    "url": "git+https://github.com/UninspiredStudio/pi-subagent-pipeline.git"
   },
-  "homepage": "https://github.com/uninspired/pi-subagent-pipeline#readme",
+  "homepage": "https://github.com/UninspiredStudio/pi-subagent-pipeline#readme",
   "bugs": {
-    "url": "https://github.com/uninspired/pi-subagent-pipeline/issues"
+    "url": "https://github.com/UninspiredStudio/pi-subagent-pipeline/issues"
   },
   "keywords": [
     "pi-package",
@@ -57,7 +57,7 @@
     "skills": [
       "./skills"
     ],
-    "image": "https://raw.githubusercontent.com/uninspired/pi-subagent-pipeline/main/assets/icon-master.png"
+    "image": "https://raw.githubusercontent.com/UninspiredStudio/pi-subagent-pipeline/main/assets/icon-master.png"
   },
   "devDependencies": {
     "@types/node": "^22.19.0",
