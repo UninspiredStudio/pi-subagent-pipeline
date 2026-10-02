@@ -26,7 +26,7 @@
     "src/",
     "profiles/",
     "skills/",
-    "assets/card.png",
+    "assets/icon-master.png",
     "LICENSE",
     "README.md"
   ],
@@ -57,7 +57,7 @@
     "skills": [
       "./skills"
     ],
-    "image": "https://raw.githubusercontent.com/uninspired/pi-subagent-pipeline/main/assets/card.png"
+    "image": "https://raw.githubusercontent.com/uninspired/pi-subagent-pipeline/main/assets/icon-master.png"
   },
   "devDependencies": {
     "@types/node": "^22.19.0",

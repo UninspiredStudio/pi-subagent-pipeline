@@ -14,7 +14,7 @@ Implemented and verified:
 - `npm run typecheck` passes with `strict` against the real peer declarations.
 - `node --experimental-strip-types scripts/selfcheck.mjs` — pure-logic assertions over profile validation, ordering,
   promotion, sentinel parsing, budgets, escalation and retention; no dependencies and no token cost.
-- Live in Pi: the extension loads, the shipped profile resolves all six roles against the live registry,
+- Live in Pi: the extension loads, the shipped profile resolves all seven roles against the live registry,
   a real child session runs a step, the sentinel is parsed, and the run directory is written.
 
 Not yet exercised interactively: the TUI overlay and widget, a live escalation, a live resume, nested
@@ -189,5 +189,5 @@ npm publish --access public
 ```
 
 The `pi-package` keyword is what makes it eligible for the [Pi package gallery](https://pi.dev/packages), and
-`pi.extensions` / `pi.skills` declare what ships. `assets/card.png` is the gallery preview referenced by
-`pi.image`, so commit it before publishing.
+`pi.extensions` / `pi.skills` declare what ships. `assets/icon-master.png` is the card image referenced by
+`pi.image`, so it has to be committed and pushed before the gallery can render it.
