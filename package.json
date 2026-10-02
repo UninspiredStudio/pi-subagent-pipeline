@@ -1,0 +1,70 @@
+{
+  "name": "@uninspired/pi-subagent-pipeline",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Configurable subagent rosters for Pi: write a profile, then run work as an observable pipeline",
+  "license": "MIT",
+  "author": "uninspired",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/uninspired/pi-subagent-pipeline.git"
+  },
+  "homepage": "https://github.com/uninspired/pi-subagent-pipeline#readme",
+  "bugs": {
+    "url": "https://github.com/uninspired/pi-subagent-pipeline/issues"
+  },
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "pi-extension",
+    "subagents",
+    "profiles",
+    "pipeline"
+  ],
+  "files": [
+    "src/",
+    "profiles/",
+    "skills/",
+    "assets/card.png",
+    "LICENSE",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-ai": {
+      "optional": true
+    },
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    },
+    "@earendil-works/pi-tui": {
+      "optional": true
+    },
+    "typebox": {
+      "optional": true
+    }
+  },
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ],
+    "skills": [
+      "./skills"
+    ],
+    "image": "https://raw.githubusercontent.com/uninspired/pi-subagent-pipeline/main/assets/card.png"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "typescript": "^5.9.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "check": "node --experimental-strip-types scripts/selfcheck.mjs"
+  }
+}

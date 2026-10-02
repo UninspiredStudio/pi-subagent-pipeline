@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "name": "default",
+  "description": "Minimal starter roster: recon, implementation, review, a second opinion, planning, and external research. Every leaf role is an explicit leaf.",
+  "aggressiveness": "medium",
+  "limits": {
+    "maxThinking": "max",
+    "maxDepth": 2,
+    "maxNodes": 12,
+    "maxConcurrent": 3,
+    "maxEscalations": 3,
+    "perStepTimeoutMs": 300000,
+    "maxResultChars": 8000,
+    "budget": {
+      "tokens": 400000,
+      "usd": 3
+    }
+  },
+  "runs": {
+    "keep": 20,
+    "maxAgeDays": 7,
+    "pinUnfinished": true
+  },
+  "roles": {
+    "scout": {
+      "description": "Read-only recon: the files, entry points and facts a later step needs, with line evidence. The cheapest role, so others should spawn it for reading.",
+      "promptFile": "scout.md",
+      "model": "opencode-go/deepseek-v4.1-flash",
+      "thinking": "low",
+      "access": "read",
+      "canSpawn": []
+    },
+    "worker": {
+      "description": "Implements one validated change and validates it.",
+      "promptFile": "worker.md",
+      "model": "opencode-go/deepseek-v4.1-flash",
+      "thinking": "low",
+      "access": "write",
+      "tools": [
+        "read",
+        "grep",
+        "find",
+        "ls",
+        "bash",
+        "edit",
+        "write"
+      ],
+      "escalate": {
+        "to": "opencode-go/qwen3.8-max",
+        "thinking": "xhigh",
+        "crossFamily": false,
+        "maxAttempts": 1
+      },
+      "canSpawn": [
+        "scout",
+        "reviewer"
+      ]
+    },
+    "reviewer": {
+      "description": "Independent review of a change against its objective, its tests and its edge cases.",
+      "promptFile": "reviewer.md",
+      "model": "opencode-go/deepseek-v4.1-flash",
+      "thinking": "max",
+      "access": "read",
+      "canSpawn": [
+        "scout"
+      ]
+    },
+    "oracle": {
+      "description": "Second opinion on a decision or a stuck problem, without editing anything.",
+      "promptFile": "oracle.md",
+      "model": "opencode-go/deepseek-v4.1-flash",
+      "thinking": "max",
+      "access": "read",
+      "canSpawn": [
+        "scout"
+      ]
+    },
+    "planner": {
+      "description": "Turns findings into a written product or architecture brief and task breakdown; read-only.",
+      "promptFile": "planner.md",
+      "model": "opencode-go/minimax-m3",
+      "thinking": "xhigh",
+      "access": "read",
+      "canSpawn": [
+        "scout"
+      ]
+    },
+    "researcher": {
+      "description": "Answers one external question from primary sources, with citations.",
+      "promptFile": "researcher.md",
+      "model": "opencode-go/gpt-6-luna",
+      "thinking": "medium",
+      "access": "read",
+      "canSpawn": []
+    }
+  },
+  "parent": {
+    "model": "opencode-go/deepseek-v4.1-flash",
+    "thinking": "low"
+  }
+}
