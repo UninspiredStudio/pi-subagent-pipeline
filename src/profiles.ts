@@ -574,6 +574,60 @@ export function renderRoster(resolved: ResolvedProfile): { mode: "injected" | "p
   };
 }
 
+/** Cost used for tiering; a model with no declared cost is treated as free (usually local). */
+function costOf(model: ModelLike): number {
+  const cost = model.cost?.input;
+  return typeof cost === "number" && Number.isFinite(cost) ? cost : 0;
+}
+
+/** Which tier a role should get: cheap recon, strong judgment, mid for everything else. */
+export function tierForRole(roleName: string): "cheap" | "mid" | "strong" {
+  if (/scout|recon|search|explore/i.test(roleName)) return "cheap";
+  if (/oracle|planner|architect|audit|design|review/i.test(roleName)) return "strong";
+  return "mid";
+}
+
+/**
+ * Rank the accessible models into the three tiers the roster uses, cheapest first.
+ * Suggestions only: the user confirms or replaces each pick.
+ */
+export function suggestModelTiers(models: ModelLike[]): { cheap?: ModelLike; mid?: ModelLike; strong?: ModelLike } {
+  const ranked = [...models].sort((a, b) => costOf(a) - costOf(b));
+  if (!ranked.length) return {};
+  const third = Math.max(1, Math.floor(ranked.length / 3));
+  return {
+    cheap: ranked[0],
+    mid: ranked[Math.min(ranked.length - 1, third)],
+    strong: ranked[ranked.length - 1],
+  };
+}
+
+export type ModelTierPicks = { cheap: string; mid: string; strong: string };
+
+/**
+ * Build a profile that layers user-chosen models onto an existing roster via `extends`.
+ * Only `model` (and a matching escalation on write roles) is set; prompts, tools, access
+ * and spawn rights stay with the base profile.
+ */
+export function buildModelsProfile(name: string, base: string, picks: ModelTierPicks, roleNames: string[]): Profile {
+  const roles: Record<string, RoleDef> = {};
+  const modelFor = (roleName: string): string => picks[tierForRole(roleName)] ?? picks.mid;
+  for (const roleName of roleNames) {
+    const role: RoleDef = { model: modelFor(roleName) };
+    if (/worker|coder|build/i.test(roleName) && picks.strong !== picks.mid) {
+      role.escalate = { to: picks.strong, thinking: "xhigh", maxAttempts: 1 };
+    }
+    roles[roleName] = role;
+  }
+  return {
+    schemaVersion: 1,
+    name,
+    description: `Models chosen from the accessible registry for the '${base}' roster.`,
+    extends: base,
+    roles,
+  };
+}
+
 /** Metadata-only roster generation from the live registry (no probes). */
 export function generateProfile(provider: string, models: ModelLike[], roleNames: string[]): Profile {
   const scoped = models.filter((m) => m.provider === provider);

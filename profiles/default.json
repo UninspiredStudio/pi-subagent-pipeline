@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "name": "default",
-  "description": "Minimal starter roster: recon, implementation, review, a second opinion, planning, and external research. Every leaf role is an explicit leaf.",
+  "description": "Starter roster: recon, implementation, prose, review, a second opinion, planning, and external research. Pins no models, because the right model is whatever the user has credentials for: pick per-role models with /pipeline-init, or let every role inherit the session model.",
   "aggressiveness": "medium",
   "limits": {
     "maxThinking": "max",
@@ -25,7 +25,6 @@
     "scout": {
       "description": "Read-only recon: the files, entry points and facts a later step needs, with line evidence. The cheapest role, so others should spawn it for reading.",
       "promptFile": "scout.md",
-      "model": "opencode-go/deepseek-v4.1-flash",
       "thinking": "low",
       "access": "read",
       "canSpawn": []
@@ -33,7 +32,6 @@
     "worker": {
       "description": "Implements one validated change and validates it.",
       "promptFile": "worker.md",
-      "model": "opencode-go/deepseek-v4.1-flash",
       "thinking": "low",
       "access": "write",
       "tools": [
@@ -45,21 +43,33 @@
         "edit",
         "write"
       ],
-      "escalate": {
-        "to": "opencode-go/qwen3.8-max",
-        "thinking": "xhigh",
-        "crossFamily": false,
-        "maxAttempts": 1
-      },
       "canSpawn": [
         "scout",
         "reviewer"
       ]
     },
+    "writer": {
+      "description": "Writes prose for humans — documentation, guides and articles — grounded in sourced facts.",
+      "promptFile": "writer.md",
+      "thinking": "medium",
+      "access": "write",
+      "tools": [
+        "read",
+        "grep",
+        "find",
+        "ls",
+        "bash",
+        "edit",
+        "write"
+      ],
+      "canSpawn": [
+        "scout",
+        "researcher"
+      ]
+    },
     "reviewer": {
       "description": "Independent review of a change against its objective, its tests and its edge cases.",
       "promptFile": "reviewer.md",
-      "model": "opencode-go/deepseek-v4.1-flash",
       "thinking": "max",
       "access": "read",
       "canSpawn": [
@@ -69,7 +79,6 @@
     "oracle": {
       "description": "Second opinion on a decision or a stuck problem, without editing anything.",
       "promptFile": "oracle.md",
-      "model": "opencode-go/deepseek-v4.1-flash",
       "thinking": "max",
       "access": "read",
       "canSpawn": [
@@ -79,7 +88,6 @@
     "planner": {
       "description": "Turns findings into a written product or architecture brief and task breakdown; read-only.",
       "promptFile": "planner.md",
-      "model": "opencode-go/minimax-m3",
       "thinking": "xhigh",
       "access": "read",
       "canSpawn": [
@@ -89,14 +97,12 @@
     "researcher": {
       "description": "Answers one external question from primary sources, with citations.",
       "promptFile": "researcher.md",
-      "model": "opencode-go/gpt-6-luna",
       "thinking": "medium",
       "access": "read",
       "canSpawn": []
     }
   },
   "parent": {
-    "model": "opencode-go/deepseek-v4.1-flash",
     "thinking": "low"
   }
 }

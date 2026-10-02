@@ -10,9 +10,12 @@ import {
   THINKING_LEVELS,
   discoverProfiles,
   generateProfile,
+  buildModelsProfile,
   renderRoster,
   resolveChain,
   resolveModelRef,
+  suggestModelTiers,
+  tierForRole,
   validateProfile,
 } from "../src/profiles.ts";
 import {
@@ -284,7 +287,7 @@ test("generation is metadata-only and tier-aware", () => {
   assert.deepEqual(generated.roles.scout.canSpawn, []);
 });
 
-test("the shipped starter profile is the six declared roles with the documented spawn rights", () => {
+test("the shipped starter profile is the seven declared roles with the documented spawn rights", () => {
   const path = new URL("../profiles/default.json", import.meta.url);
   const raw = readJson(path);
   const declared = new Set();
@@ -298,13 +301,64 @@ test("the shipped starter profile is the six declared roles with the documented 
   });
   const resolved = validateProfile(raw, { ...SRC, path: path.pathname }, { models, available: models });
   assert.deepEqual(resolved.errors, [], `the shipped profile must validate: ${resolved.errors.join("; ")}`);
-  assert.deepEqual(Object.keys(resolved.roles).sort(), ["oracle", "planner", "researcher", "reviewer", "scout", "worker"]);
+  assert.deepEqual(Object.keys(resolved.roles).sort(), ["oracle", "planner", "researcher", "reviewer", "scout", "worker", "writer"]);
   assert.deepEqual(resolved.roles.scout.canSpawn, [], "scout is the cheapest role and must stay a leaf");
   assert.deepEqual(resolved.roles.researcher.canSpawn, [], "researcher has no cheaper helper and must stay a leaf");
   assert.deepEqual(resolved.roles.worker.canSpawn, ["scout", "reviewer"]);
   assert.deepEqual(resolved.roles.reviewer.canSpawn, ["scout"]);
   assert.deepEqual(resolved.roles.oracle.canSpawn, ["scout"]);
   assert.deepEqual(resolved.roles.planner.canSpawn, ["scout"]);
+  assert.equal(resolved.roles.writer.access, "write");
+  assert.deepEqual(resolved.roles.writer.canSpawn, ["scout", "researcher"]);
+  // A shipped profile must not assume a provider: the user picks models with /pipeline-init.
+  for (const roleDef of Object.values(raw.roles ?? {})) {
+    assert.equal(roleDef.model, undefined, "the shipped profile must not pin a model");
+    assert.equal(roleDef.escalate, undefined, "the shipped profile must not pin an escalation model");
+  }
+  assert.equal(raw.parent?.model, undefined, "the shipped profile must not pin a parent model");
+  assert.equal(Object.values(resolved.roles).some((r) => r.modelRef), false);
+});
+
+test("model tiering suggests cheap/mid/strong from declared cost", () => {
+  const models = [
+    { provider: "p", id: "x16", cost: { input: 16, output: 30 } },
+    { provider: "p", id: "free" },
+    { provider: "p", id: "c1", cost: { input: 1, output: 2 } },
+    { provider: "p", id: "s8", cost: { input: 8, output: 16 } },
+    { provider: "p", id: "c2", cost: { input: 2, output: 4 } },
+    { provider: "p", id: "m4", cost: { input: 4, output: 8 } },
+  ];
+  const tiers = suggestModelTiers(models);
+  assert.equal(tiers.cheap.id, "free", "an undeclared cost is treated as free, not as the most expensive");
+  assert.equal(tiers.mid.id, "c2");
+  assert.equal(tiers.strong.id, "x16");
+  assert.deepEqual(suggestModelTiers([]), {});
+  assert.equal(suggestModelTiers([models[1]]).cheap.id, "free");
+});
+
+test("role tiers favour recon, judgement, and the middle", () => {
+  assert.equal(tierForRole("scout"), "cheap");
+  assert.equal(tierForRole("reviewer"), "strong");
+  assert.equal(tierForRole("oracle"), "strong");
+  assert.equal(tierForRole("planner"), "strong");
+  assert.equal(tierForRole("worker"), "mid");
+  assert.equal(tierForRole("writer"), "mid");
+});
+
+test("buildModelsProfile layers models onto a base roster and escalates write roles", () => {
+  const profile = buildModelsProfile("mine", "default", { cheap: "p/cheap", mid: "p/mid", strong: "p/strong" }, [
+    "scout",
+    "worker",
+    "reviewer",
+  ]);
+  assert.equal(profile.extends, "default");
+  assert.equal(profile.roles.scout.model, "p/cheap");
+  assert.equal(profile.roles.worker.model, "p/mid");
+  assert.deepEqual(profile.roles.worker.escalate, { to: "p/strong", thinking: "xhigh", maxAttempts: 1 });
+  assert.equal(profile.roles.reviewer.model, "p/strong");
+  assert.equal(profile.roles.reviewer.escalate, undefined);
+  const same = buildModelsProfile("mine", "default", { cheap: "p/x", mid: "p/x", strong: "p/x" }, ["worker"]);
+  assert.equal(same.roles.worker.escalate, undefined, "no escalation when strong and mid are the same model");
 });
 
 // ------------------------------------------------------------- plan logic

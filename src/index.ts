@@ -1,17 +1,19 @@
 /**
  * pi-pipeline: a profile is the subagent roster, and delegation is a default path.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getAgentDir, type ExtensionAPI, type ExtensionContext, type Theme } from "@earendil-works/pi-coding-agent";
 import { formatTreeRows, totalUsage, truncate, type NodeState } from "./plan.ts";
 import {
   AGGRESSIVENESS,
+  buildModelsProfile,
   discoverProfiles,
   generateProfile,
   renderRoster,
   resolveChain,
+  suggestModelTiers,
   validateProfile,
   type Aggressiveness,
   type ModelLike,
@@ -62,7 +64,9 @@ function directive(mode: Exclude<Aggressiveness, "off">): string {
 - Writing is serialized: only one write step runs at a time, and readers are ordered after writers they could
   observe. Never plan two write steps to run together.
 - A blocked step with an escalation target hands off automatically. Anything still blocked or failed must be
-  reported to the user; do not retry the same step in a loop.`;
+  reported to the user; do not retry the same step in a loop.
+- The pipeline tool is this session's delegation mechanism. If any other instruction routes
+  delegation to a tool that is not in your tool list, follow this section instead.`;
 }
 
 /** The newest session-level override, or undefined to fall back to the profile / persisted default. */
@@ -251,6 +255,34 @@ function describeModel(model?: { provider: string; id: string }, thinking?: stri
   if (!model) return "inherit";
   return `${model.provider}/${model.id}${thinking ? `:${thinking}` : ""}`;
 }
+
+function modelLabel(model: ModelLike): string {
+  const cost = model.cost?.input !== undefined ? ` · $${model.cost.input}/$${model.cost.output ?? "?"} per Mtok` : "";
+  return `${model.provider}/${model.id}${cost}`;
+}
+
+function sortByCost(models: ModelLike[]): ModelLike[] {
+  return [...models].sort(
+    (a, b) => (a.cost?.input ?? 0) - (b.cost?.input ?? 0),
+  );
+}
+
+/** Ask for one model, with the suggestion first in the list. */
+async function pickModel(
+  ctx: ExtensionContext,
+  title: string,
+  models: ModelLike[],
+  suggested?: ModelLike,
+): Promise<ModelLike | undefined> {
+  const ordered = sortByCost(models);
+  const index = suggested ? ordered.findIndex((m) => m.provider === suggested.provider && m.id === suggested.id) : -1;
+  if (index > 0) ordered.unshift(ordered.splice(index, 1)[0]);
+  const labels = ordered.map(modelLabel);
+  const chosen = await ctx.ui.select(title, labels);
+  if (!chosen) return undefined;
+  const picked = ordered[labels.indexOf(chosen)];
+  return picked ? { ...picked } : undefined;
+}
 function profileReport(
   resolved: ResolvedProfile,
   deps: PipelineDeps,
@@ -278,6 +310,9 @@ function profileReport(
   }
   for (const warning of resolved.warnings) lines.push(`warning: ${warning}`);
   for (const error of resolved.errors) lines.push(`ERROR: ${error}`);
+  if (Object.keys(resolved.roles).length && !Object.values(resolved.roles).some((role) => role.modelRef)) {
+    lines.push("note: no role pins a model — every step inherits the session model. Run /pipeline-init to choose per-role models.");
+  }
   return lines;
 }
 
@@ -330,7 +365,14 @@ export default function pipelineExtension(pi: ExtensionAPI) {
         }
         if (event.reason === "startup" || event.reason === "new" || event.reason === "reload") {
           await applyParentModel(pi, ctx, resolved);
-        }
+          if (
+            (event.reason === "startup" || event.reason === "new") &&
+            Object.keys(resolved.roles).length &&
+            !Object.values(resolved.roles).some((role) => role.modelRef)
+          ) {
+            ctx.ui.notify("pipeline: no per-role models chosen — every step inherits the session model. Run /pipeline-init to pick models.", "info");
+          }
+}
       }
     } catch {
       // profile loading at session start is best-effort; doctor surfaces errors
@@ -387,13 +429,17 @@ export default function pipelineExtension(pi: ExtensionAPI) {
     executionMode: "sequential",
     renderShell: "self",
     renderCall: (args: any, renderTheme: Theme) => {
-      const lines = renderPlanPreview(args?.steps ?? [], 100, renderTheme as any);
-      return { render: () => lines, invalidate: () => {} } as any;
+      return {
+        render: (width: number) => renderPlanPreview(args?.steps ?? [], width, renderTheme as any),
+        invalidate: () => {},
+      } as any;
     },
     renderResult: (result: any, _options: any, renderTheme: Theme) => {
       const nodes = result?.details?.nodes ?? {};
-      const lines = renderResultLines(nodes, 100, renderTheme as any);
-      return { render: () => lines, invalidate: () => {} } as any;
+      return {
+        render: (width: number) => renderResultLines(nodes, width, renderTheme as any),
+        invalidate: () => {},
+      } as any;
     },
     execute: async (_toolCallId: string, params: any, signal: AbortSignal | undefined, _onUpdate: any, ctx: ExtensionContext): Promise<any> => {
       lastContext = ctx;
@@ -654,6 +700,92 @@ export default function pipelineExtension(pi: ExtensionAPI) {
       writeConfig(path, { activeProfile: command });
       const applied = await applyParentModel(pi, ctx, resolved);
       ctx.ui.notify(`Active profile: ${command} (${Object.keys(resolved.roles).length} roles)${applied ? ` | ${applied}` : ""}`, "info");
+    },
+  });
+
+  pi.registerCommand("pipeline-init", {
+    description: "Choose per-role models from the accessible registry and save them as a user profile (extends the active roster)",
+    handler: async (args: string, ctx: any) => {
+      const agentDir = getAgentDir();
+      const trusted = ctx.isProjectTrusted();
+      const config = readConfig(agentDir, ctx.cwd, trusted);
+      const base = config.activeProfile && config.activeProfile !== "none" ? config.activeProfile : "default";
+      const loaded = loadResolved(pi, ctx, base);
+      const roleNames = loaded.resolved ? Object.keys(loaded.resolved.roles) : [];
+      if (!loaded.resolved || !roleNames.length) {
+        ctx.ui.notify(`Cannot init: ${loaded.errors.join("; ") || `profile '${base}' has no roles`}`, "error");
+        return;
+      }
+
+      const available: ModelLike[] = (ctx.modelRegistry.getAvailable() as any[]).map(toModelLike);
+      if (!available.length) {
+        ctx.ui.notify("No accessible models: configure credentials for at least one provider first.", "error");
+        return;
+      }
+      const byRef = new Map<string, ModelLike>(available.map((model) => [`${model.provider}/${model.id}`, model]));
+      const parts = String(args ?? "").trim().split(/\s+/).filter(Boolean);
+
+      // Scriptable form: /pipeline-init <name> <cheap> <mid> <strong>
+      let name: string | undefined;
+      let cheap: ModelLike | undefined;
+      let mid: ModelLike | undefined;
+      let strong: ModelLike | undefined;
+      if (parts.length >= 4) {
+        name = parts[0];
+        cheap = byRef.get(parts[1]);
+        mid = byRef.get(parts[2]);
+        strong = byRef.get(parts[3]);
+        const missing = [cheap, mid, strong].some((model) => !model);
+        if (missing) {
+          ctx.ui.notify(`Usage: /pipeline-init <name> <cheap> <mid> <strong>, with refs from:\n${available.map(modelLabel).join("\n")}`, "warning");
+          return;
+        }
+      } else {
+        if (!ctx.hasUI) {
+          ctx.ui.notify("Usage (no interactive UI): /pipeline-init <name> <cheap> <mid> <strong>", "warning");
+          return;
+        }
+        const suggestion = suggestModelTiers(available);
+        cheap = await pickModel(ctx, "Cheap tier — recon (scout): cheapest capable model", available, suggestion.cheap);
+        if (!cheap) return;
+        mid = await pickModel(ctx, "Mid tier — implementation, prose, research: the everyday model", available, suggestion.mid);
+        if (!mid) return;
+        strong = await pickModel(ctx, "Strong tier — review, second opinion, planning, escalation", available, suggestion.strong);
+        if (!strong) return;
+        name = parts[0] ?? mid.provider;
+      }
+
+      const existing = listProfileNames(ctx);
+      if (existing.includes(name)) {
+        ctx.ui.notify(
+          `Profile '${name}' already exists. Re-run as /pipeline-init <newName> and pick models, or edit ${join(agentDir, "profiles", "pipeline", `${name}.json`)}.`,
+          "warning",
+        );
+        return;
+      }
+
+      const profile = buildModelsProfile(name, base, {
+        cheap: `${cheap!.provider}/${cheap!.id}`,
+        mid: `${mid!.provider}/${mid!.id}`,
+        strong: `${strong!.provider}/${strong!.id}`,
+      }, roleNames);
+      const target = join(agentDir, "profiles", "pipeline", `${name}.json`);
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, `${JSON.stringify(profile, null, 2)}\n`, "utf-8");
+
+      // Validate the file as discovery will see it; a bad one must not become the active profile.
+      const check = loadResolved(pi, ctx, name);
+      if (!check.resolved || check.resolved.errors.length) {
+        unlinkSync(target);
+        ctx.ui.notify(`Refusing to activate '${name}':\n- ${(check.resolved?.errors ?? check.errors).join("\n- ")}`, "error");
+        return;
+      }
+      writeConfig(configPath(agentDir, ctx.cwd, trusted), { activeProfile: name });
+      const applied = await applyParentModel(pi, ctx, check.resolved);
+      const roles = Object.entries(check.resolved.roles)
+        .map(([roleName, role]) => `${roleName}: ${describeModel(role.model)}${role.thinking ? `:${role.thinking}` : ""}`)
+        .join("\n");
+      ctx.ui.notify(`Wrote and activated ${target} (extends '${base}')${applied ? ` | ${applied}` : ""}\n${roles}`, "info");
     },
   });
 
