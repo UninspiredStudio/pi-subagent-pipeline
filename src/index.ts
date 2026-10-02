@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getAgentDir, type ExtensionAPI, type ExtensionContext, type Theme } from "@earendil-works/pi-coding-agent";
-import { formatTreeRows, totalUsage, truncate, type NodeState } from "./plan.ts";
+import { formatTreeRows, singleTaskStep, totalUsage, truncate, type NodeState, type Step } from "./plan.ts";
 import {
   AGGRESSIVENESS,
   buildModelsProfile,
@@ -42,23 +42,25 @@ const ENTRY_MODE = "pipeline-aggressiveness";
 
 const AGGRESSIVENESS_LEAD: Record<Exclude<Aggressiveness, "off">, string> = {
   low:
-    "This plugin is active, but delegate sparingly: the subagent pipeline is a last resort, used only when inline work genuinely cannot do the job.",
+    "This plugin is active; delegation is pre-authorized, but rationed: the subagent pipeline is a last resort, used only when inline work genuinely cannot do the job.",
   medium:
-    "This plugin is active: the subagent pipeline is the default execution path, so run work through it where it applies rather than working inline out of habit.",
+    "This plugin is active and delegation is pre-authorized. Spawning subagent steps is your primary execution path: for substantial work, do not do the reading or the work inline — delegate it through the pipeline.",
   high:
-    "This plugin is active: run every substantial task through the subagent pipeline. Spawning subagent steps is the default even when inline work looks sufficient.",
+    "This plugin is active and delegation is pre-authorized. Run substantial tasks through the subagent pipeline by default; treat an inline answer as the exception you must be able to justify.",
 };
 
 const AGGRESSIVENESS_WHEN: Record<Exclude<Aggressiveness, "off">, string> = {
   low: "Spawn a step only when the work is genuinely independent of this context, needs a different model or effort, is an independent review, or is a long read that would flood this context. For anything else, work inline and say nothing about the pipeline.",
   medium:
-    "Use the pipeline tool when a task needs two or more genuinely independent workstreams, an independent review, or a sub-task that would flood this context. Work inline for a trivial, single-threaded task where a step would cost more than it saves.",
-  high: "Spawn a pipeline for any task that reads more than a file or two, changes anything, or needs investigation. Work inline only for a one-line lookup or a direct answer.",
+    "Before you start reading or editing inline, ask whether a pipeline fits, and spawn one unless the task is trivial. Delegate: any investigation that reads more than two files, any independent review or second opinion, any task with two or more separable parts, and anything whose output would flood this context. Work inline only for a one-line lookup or a direct answer that needs no reading.",
+  high: "Spawn a pipeline for any task that reads a file, changes anything, or needs investigation, including a single research question. Work inline only for a one-line lookup, a trivial edit, or a direct answer from what you already know.",
 };
 
 function directive(mode: Exclude<Aggressiveness, "off">): string {
   return `${AGGRESSIVENESS_LEAD[mode]}
 - ${AGGRESSIVENESS_WHEN[mode]}
+- Delegation is pre-authorized: you never need to ask permission before spawning a step.
+- For one step, call pipeline({ task: "<the task>" }) and let the role default to a read role; do not write a plan for a single question.
 - Every step needs a role from the active roster, an objective and a deliverable. Express ordering with needs.
 - Pick the cheapest role that can carry a step, and let a role spawn the cheaper roles it is allowed to for the rest.
 - Writing is serialized: only one write step runs at a time, and readers are ordered after writers they could
@@ -418,19 +420,23 @@ export default function pipelineExtension(pi: ExtensionAPI) {
     name: "pipeline",
     label: "pipeline",
     description:
-      "Run a plan of steps, one subagent per step, from the active profile's roster. Use this as the default path for substantial work — any task that reads more than a file or two, changes anything, or needs investigation — rather than working inline out of habit; work inline only for a one-line lookup or a direct answer. Steps need id, role, objective and deliverable; order with needs.",
+      "Run a plan of steps, one subagent per step, from the active profile's roster. Use it to isolate context, run independent steps in parallel, or get an independent review. Pass steps for a multi-step plan, or task for a single step.",
     promptSnippet: "pipeline: run a step plan across the active subagent roster",
     promptGuidelines: [
-      "Prefer the pipeline over inline work for any substantial task; a step needs a role from the active roster, an objective and a deliverable (a bare task string is rejected).",
-      "Order steps with needs rather than array position; independent read steps run in parallel, write steps run alone.",
-      "A child ends with PIPELINE_STATUS: ok or blocked; blocked hands off to the role's escalation target automatically.",
+      "A step needs a role from the active roster, an objective and a deliverable; order steps with needs rather than array position.",
+      "For a single step pass task (and optionally role) instead of building a steps array.",
+      "Independent read steps run in parallel, write steps run alone; a child ends with PIPELINE_STATUS: ok or blocked, and blocked hands off to the role's escalation target automatically.",
     ],
     parameters: PipelineParams,
     executionMode: "sequential",
     renderShell: "self",
     renderCall: (args: any, renderTheme: Theme) => {
       return {
-        render: (width: number) => renderPlanPreview(args?.steps ?? [], width, renderTheme as any),
+        render: (width: number) => {
+          let preview = args?.steps ?? [];
+          if (!preview.length && args?.task) preview = [{ id: "task", role: args.role ?? "task", objective: args.task }];
+          return renderPlanPreview(preview, width, renderTheme as any);
+        },
         invalidate: () => {},
       } as any;
     },
@@ -467,7 +473,19 @@ export default function pipelineExtension(pi: ExtensionAPI) {
         };
       }
 
-      const result = await runPipeline(depsFor(pi, ctx, signal, refreshUi), resolved, params.steps ?? [], {
+      let steps: Step[] = params.steps ?? [];
+      if (!steps.length && params.task) {
+        steps = [singleTaskStep(params.task, params.role, Object.entries(resolved.roles).map(([name, role]) => ({ name, access: role.access })))];
+      }
+      if (!steps.length) {
+        return {
+          content: [{ type: "text", text: 'Provide either steps: [ ... ] for a multi-step plan, or task: "<the task>" (with an optional role) for a single step.' }],
+          isError: true,
+          details: undefined,
+        };
+      }
+
+      const result = await runPipeline(depsFor(pi, ctx, signal, refreshUi), resolved, steps, {
         roleAccess: roleAccessOf(resolved),
         concurrency: params.concurrency,
         resume: params.resume,

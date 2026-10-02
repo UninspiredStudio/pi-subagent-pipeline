@@ -18,6 +18,24 @@ export interface Step {
   touches?: string[];
 }
 
+/**
+ * Synthesize the one-step plan for the `task` shortcut. With no role given, default to the first
+ * read role so a bare question becomes a read-only step rather than a write.
+ */
+export function singleTaskStep(
+  task: string,
+  role?: string,
+  roles?: Array<{ name: string; access: "read" | "write" }>,
+): Step {
+  const fallback = roles?.find((r) => r.access === "read")?.name ?? roles?.[0]?.name ?? "scout";
+  return {
+    id: "task",
+    role: (role ?? "").trim() || fallback,
+    objective: task.trim(),
+    deliverable: "The answer or artifact the task asks for.",
+  };
+}
+
 export const NODE_STATUSES = [
   "queued",
   "running",

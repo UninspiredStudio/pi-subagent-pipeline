@@ -157,6 +157,8 @@ Defaults, from `src/profiles.ts`:
 
 `pipeline({ steps })`. Each step needs `id`, `role`, `objective`, `deliverable`; optional are `scope`, `context`, `needs`, `model`, `thinking`, `touches`. The tool also takes `profile` (run on a named profile for this call), `concurrency` (max parallel read steps, clamped to `maxConcurrent`) and `resume` (a recorded run id).
 
+For a single step, pass `task` instead of building a `steps` array — `pipeline({ task: "Map how auth is wired." })`, with an optional `role` that defaults to the first read role in the roster.
+
 - Ordering comes from `needs`, not array position. Independent read steps run in parallel; **a write step always runs alone**, and a reader that could observe a partial write is promoted after that writer (recorded, with the basis: declared `touches`, inferred, or conservative).
 - Every child ends with `PIPELINE_STATUS: ok` or `PIPELINE_STATUS: blocked - <reason>`.
 - Escalation fires only for a step that ends `blocked` (explicit blocked, or a failed `verify.command`) or that produced **no output at all** (recorded `failed`). A timeout returns `stopped`; a thrown error is recorded `failed` in the catch block before the escalation check. Neither escalates. A missing sentinel *with* output is treated as `ok`.

@@ -32,6 +32,7 @@ import {
   planLevel,
   promoteReaders,
   shouldEscalate,
+  singleTaskStep,
   sumUsage,
   totalUsage,
   touchesAny,
@@ -370,6 +371,21 @@ test("sentinel parsing covers all five cases", () => {
   assert.equal(parseSentinel(""), undefined);
   assert.equal(parseSentinel("PIPELINE_STATUS: ok\ntrailing note"), undefined, "only the last non-empty line counts");
   assert.equal(blockedReason("x\nPIPELINE_STATUS: blocked - needs credentials"), "needs credentials");
+});
+
+test("the single-task shortcut synthesizes one read step", () => {
+  const roles = [
+    { name: "worker", access: "write" },
+    { name: "scout", access: "read" },
+  ];
+  assert.deepEqual(singleTaskStep("Map the auth flow.", undefined, roles), {
+    id: "task",
+    role: "scout",
+    objective: "Map the auth flow.",
+    deliverable: "The answer or artifact the task asks for.",
+  });
+  assert.equal(singleTaskStep("Patch it.", "worker", roles).role, "worker", "an explicit role wins");
+  assert.equal(singleTaskStep("x", undefined, []).role, "scout", "a roster with no read role still names one");
 });
 
 test("step validation rejects the shapes the plan must reject", () => {

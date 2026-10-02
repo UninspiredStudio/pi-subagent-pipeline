@@ -17,7 +17,9 @@ export const StepSchema = Type.Object({
 });
 
 export const PipelineParams = Type.Object({
-  steps: Type.Array(StepSchema, { description: "Ordered plan; ordering comes from needs, not array position" }),
+  steps: Type.Optional(Type.Array(StepSchema, { description: "Ordered plan; ordering comes from needs, not array position. Use steps for multi-step work, or task for a single step." })),
+  task: Type.Optional(Type.String({ description: "Single-task shortcut: one step, no plan needed. Pass the task as one sentence instead of building a steps array." })),
+  role: Type.Optional(Type.String({ description: "Role for the task shortcut; defaults to the first read role in the active roster." })),
   profile: Type.Optional(Type.String({ description: "Run on a named profile without changing the active one" })),
   concurrency: Type.Optional(Type.Number({ minimum: 1, maximum: 32, description: "Max parallel read-only steps (clamped to the profile's maxConcurrent)" })),
   resume: Type.Optional(Type.String({ description: "Resume a recorded run id" })),
