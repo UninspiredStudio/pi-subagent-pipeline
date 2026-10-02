@@ -19,7 +19,11 @@ switches, `pipeline({profile})` uses one for a single run, and `--pipeline-profi
 `aggressiveness` (`low` | `medium` | `high` | `off`) on the profile sets how readily the parent delegates;
 `/pipeline-aggressiveness <level>` overrides it for the session (`default <level>` persists the default),
 and `/pipeline-profile list | check | generate` lists rosters, validates the active one, or builds one from
-the model registry.
+the model registry (metadata only).
+
+The shipped `default` roster pins no models: every role inherits the session model until `/pipeline-init`
+chooses a cheap/mid/strong model from the accessible registry and saves them as a user profile that
+`extends` the active roster. Non-interactively: `/pipeline-init <name> <cheap> <mid> <strong>`.
 
 ## Running work
 
@@ -29,7 +33,7 @@ parallel; a step with `access: write` runs alone, and a reader that could see a 
 after the writer automatically.
 
 Every child ends its reply with `PIPELINE_STATUS: ok` or `PIPELINE_STATUS: blocked - <reason>`. Only an
-explicit `blocked`, a failed `verify.command`, an error or a timeout triggers escalation.
+explicit `blocked` or a failed `verify.command` triggers escalation.
 
 `pipeline_status({action})` reads or controls a run: `roster`, `tree`, `runs`, `stop`. A stopped or
 interrupted run can be resumed with `pipeline({resume: runId})`, which re-resolves its remaining steps
@@ -38,6 +42,6 @@ against the currently active profile.
 ## When a step fails
 
 Check `/pipeline-doctor` first: it reports the active profile and source file, each role's resolved model
-and effort, unresolved or unauthenticated bindings, limits, the pinned run count and delegation-tool
+and effort, unresolved or unauthenticated bindings, limits, the resumable run count and delegation-tool
 collisions. Then `/pipeline-tree` for the run, and the run directory at
 `~/.pi/agent/pipeline/runs/<runId>/` for the full child output and transcript.
