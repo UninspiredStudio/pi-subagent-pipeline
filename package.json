@@ -65,6 +65,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "check": "node --experimental-strip-types scripts/selfcheck.mjs"
+    "check": "node --experimental-strip-types scripts/selfcheck.mjs",
+    "e2e": "node --experimental-strip-types scripts/e2e.mjs"
   }
 }

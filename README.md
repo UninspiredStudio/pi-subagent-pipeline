@@ -208,10 +208,13 @@ Retention: finished runs age out by `maxAgeDays`, then by `keep`; unfinished run
 npm install                                        # devDependencies: typescript and @types/node
 npm run typecheck                                  # strict, no output means clean
 npm run check                                      # node --experimental-strip-types scripts/selfcheck.mjs
+npm run e2e                                        # a real session: proves a child spawns (spends tokens)
 PIPELINE_SMOKE=1 pi --extension ./src/index.ts     # then /pipeline-smoke
 ```
 
 `selfcheck.mjs` needs no dependencies: the pure modules (`profiles.ts`, `plan.ts`, `runs.ts`) have no platform imports, so profile discovery and validation, ordering, reader/writer promotion, sentinel parsing, budget and escalation decisions, retention and the tree renderer are exercised directly.
+
+`e2e.mjs` loads the extension in a real Pi session against a temp agent directory and asserts on the artifacts a spawn leaves behind: a run directory, a node that ends `ok`, a non-empty child session transcript, the node output file and the event log. It needs credentials for one accessible model and spends a few cheap child turns; it never touches your real runs.
 
 ## Trust
 
