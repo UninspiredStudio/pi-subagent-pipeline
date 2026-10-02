@@ -418,10 +418,10 @@ export default function pipelineExtension(pi: ExtensionAPI) {
     name: "pipeline",
     label: "pipeline",
     description:
-      "Run a plan of steps, one subagent per step, from the active profile's roster. Use when a task has genuinely independent workstreams or needs context isolation. Steps need id, role, objective and deliverable; order with needs.",
+      "Run a plan of steps, one subagent per step, from the active profile's roster. Use this as the default path for substantial work — any task that reads more than a file or two, changes anything, or needs investigation — rather than working inline out of habit; work inline only for a one-line lookup or a direct answer. Steps need id, role, objective and deliverable; order with needs.",
     promptSnippet: "pipeline: run a step plan across the active subagent roster",
     promptGuidelines: [
-      "A pipeline step needs a role from the active roster, an objective and a deliverable; a bare task string is rejected.",
+      "Prefer the pipeline over inline work for any substantial task; a step needs a role from the active roster, an objective and a deliverable (a bare task string is rejected).",
       "Order steps with needs rather than array position; independent read steps run in parallel, write steps run alone.",
       "A child ends with PIPELINE_STATUS: ok or blocked; blocked hands off to the role's escalation target automatically.",
     ],
